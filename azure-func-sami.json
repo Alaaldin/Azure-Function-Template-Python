@@ -1,0 +1,155 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "appName": {
+            "type": "string",
+            "defaultValue": "[uniqueString(resourceGroup().id)]",
+            "metadata": {
+                "description": "The name of the azure function."
+            }
+        },
+        "location": {
+            "type": "string"
+        },
+        "vmssName": {
+            "type": "string",
+            "metadata": {
+                "description": "VMSS name"
+            }
+        },
+        "dnsZoneResourceGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "DNS Zone Resource Group name"
+            }
+        },
+        "builtInRoleType": {
+          "type": "string",
+          "defaultValue": "Contributor"
+        },
+      "rbacGuid": {
+          "type": "string",
+          "defaultValue": "[newGuid()]"
+      }
+    },
+    "variables": {
+        "resourceGroup": "[resourceGroup()]",
+        "vmssResourceGroupName": "[resourceGroup().name]",
+        "functionAppName": "[parameters('appName')]",
+        "hostingPlanName": "[concat('ASP-',parameters('appName'),'-', substring(uniqueString(variables('resourceGroup').id),0,4))]",
+        "storageAccountName": "[substring(concat('azurefunction',uniqueString(variables('resourceGroup').id)),0,21)]",
+        "applicationInsightsName": "[parameters('appName')]",
+        "Contributor": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",        "functionAppId": "[resourceId('Microsoft.Web/sites', parameters('appName'))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2017-09-01",
+            "type": "Microsoft.Authorization/roleAssignments",
+            "name": "[parameters('rbacGuid')]",
+            "properties": {
+                "roleDefinitionId": "[variables(parameters('builtInRoleType'))]",
+                "principalId": "[reference(variables('functionAppId'), '2019-08-01', 'Full').identity.principalId]",
+                "scope": "[resourceGroup().id]"
+            },
+             "dependsOn": [
+                "[resourceId('Microsoft.Web/sites/', variables('functionAppName'))]"
+            ]
+        },
+        {
+            "apiVersion": "2018-11-01",
+            "name": "[variables('functionAppName')]",
+            "type": "Microsoft.Web/sites",
+            "kind": "functionapp,linux",
+            "location": "[parameters('location')]",
+            "tags": {},
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]"
+            ],
+            "properties": {
+                 "siteConfig": {
+                    "appSettings": [
+                        {
+                            "name": "FUNCTIONS_EXTENSION_VERSION",
+                            "value": "~3"
+                        },
+                        {
+                            "name": "FUNCTIONS_WORKER_RUNTIME",
+                            "value": "python"
+                        },
+                        {
+                            "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value,';EndpointSuffix=','core.windows.net')]"
+                        },
+                        {
+                            "name": "WEBSITE_RUN_FROM_PACKAGE",
+                            "value": "https://raw.githubusercontent.com/chkp-romanka/CloudGuardIaaS/master/azure/azure-function/azure-function.zip"
+
+                        },
+                        {
+                            "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                            "value": "[reference(resourceId('microsoft.insights/components/', variables('applicationInsightsName')), '2015-05-01').InstrumentationKey]"
+                        },
+                        {
+                            "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                            "value": "[reference(resourceId('microsoft.insights/components/', variables('applicationInsightsName')), '2015-05-01').ConnectionString]"
+                        },
+                        {
+                            "name": "VMSS_RESOURCE_GROUP_NAME",
+                            "value": "[variables('vmssResourceGroupName')]"
+                        },
+                        {
+                            "name": "VMSS_NAME",
+                            "value": "[parameters('vmssName')]"
+                        }
+                
+                    ],
+                    "linuxFxVersion": "Python|3.7"
+                },
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+                "reserved": true
+            }
+        },
+        {
+          "type": "Microsoft.Web/serverfarms",
+          "apiVersion": "2018-02-01",
+          "name": "[variables('hostingPlanName')]",
+          "location": "[parameters('location')]",
+          "sku": {
+            "name": "Y1",
+            "tier": "Dynamic",
+            "size": "Y1",
+            "family": "Y",
+            "capacity": 0
+          },
+          "properties": {
+              "reserved": true
+          }
+        },
+        {
+            "apiVersion": "2019-06-01",
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[variables('storageAccountName')]",
+            "location": "[parameters('location')]",
+            "tags": {},
+            "sku": {
+                "name": "Standard_LRS"
+            }
+        },
+        {
+            "apiVersion": "2015-05-01",
+            "name": "[variables('functionAppName')]",
+            "type": "microsoft.insights/components",
+            "location": "[parameters('location')]",
+            "tags": {},
+            "properties": {
+                "Application_Type": "web",
+                "Request_Source": "IbizaWebAppExtensionCreate"
+            }
+        }
+    ]
+}

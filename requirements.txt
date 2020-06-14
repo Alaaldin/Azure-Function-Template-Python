@@ -1,0 +1,6 @@
+azure-functions
+azure-mgmt-resource
+azure-mgmt-dns
+msrestazure==0.6.3
+azure-mgmt-compute==12.0.0
+azure-mgmt-network==10.2.0
